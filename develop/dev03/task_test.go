@@ -1,76 +1,69 @@
 package main
 
 import (
-	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 )
 
-func TestSortLines(t *testing.T) {
-	testCases := []struct {
-		input    string
-		args     []string
-		expected string
-	}{
-		{
-			input: `banana
-apple
-orange`,
-			args:     []string{"-k", "0"},
-			expected: "apple\nbanana\norange\n",
-		},
-		{
-			input: `5 apple
-10 banana
-3 orange`,
-			args:     []string{"-k", "1", "-n"},
-			expected: "3 orange\n5 apple\n10 banana\n",
-		},
-		{
-			input: `orange
-banana
-apple`,
-			args:     []string{"-k", "0", "-r"},
-			expected: "orange\nbanana\napple\n",
-		},
+func TestSortByColumn(t *testing.T) {
+	inputContent := "apple 2\nbanana 1\ncherry 3\n"
+	expectedOutput := "banana 1\napple 2\ncherry 3\n"
+	err := runSortTest(t, inputContent, expectedOutput, 2, false, false, false)
+	if err != nil {
+		t.Errorf("Error occurred: %v", err)
+	}
+}
 
-		{
-			input: `apple
-banana
-apple`,
-			args:     []string{"-k", "0", "-u"},
-			expected: "apple\nbanana\n",
-		},
+func TestReverseSort(t *testing.T) {
+	inputContent := "c\nb\na\n"
+	expectedOutput := "c\nb\na\n"
+	err := runSortTest(t, inputContent, expectedOutput, 1, false, true, false)
+	if err != nil {
+		t.Errorf("Error occurred: %v", err)
+	}
+}
+
+func TestUniqueSort(t *testing.T) {
+	inputContent := "apple\nbanana\napple\nbanana\ncherry\n"
+	expectedOutput := "apple\nbanana\ncherry\n"
+	err := runSortTest(t, inputContent, expectedOutput, 1, false, false, true)
+	if err != nil {
+		t.Errorf("Error occurred: %v", err)
+	}
+}
+
+
+func runSortTest(t *testing.T, inputContent, expectedOutput string, column int, numeric, reverse, unique bool) error {
+	inputFile, err := os.CreateTemp("", "input")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %s", err)
+	}
+	defer os.Remove(inputFile.Name())
+
+	if _, err = io.WriteString(inputFile, inputContent); err != nil {
+		t.Fatalf("Failed to write to temp file: %s", err)
+	}
+	inputFile.Close()
+
+	outputFile, err := os.CreateTemp("", "output")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %s", err)
+	}
+	defer os.Remove(outputFile.Name())
+
+	err = compareSort(inputFile.Name(), outputFile.Name(), column, numeric, reverse, unique)
+	if err != nil {
+		return err
 	}
 
-	for _, tc := range testCases {
-		tmpfile, err := ioutil.TempFile("", "test_input")
-		if err != nil {
-			t.Fatal("Error creating temporary file:", err)
-		}
-		defer os.Remove(tmpfile.Name())
-
-		if _, err := tmpfile.Write([]byte(tc.input)); err != nil {
-			t.Fatal("Error writing to temporary file:", err)
-		}
-		if err := tmpfile.Close(); err != nil {
-			t.Fatal("Error closing temporary file:", err)
-		}
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-		main()
-		w.Close()
-
-		os.Stdout = oldStdout
-
-		var out bytes.Buffer
-		out.ReadFrom(r)
-
-		actual := out.String()
-		if actual != tc.expected {
-			t.Errorf("Unexpected output for args %v: expected %q, got %q", tc.args, tc.expected, actual)
-		}
+	output, err := os.ReadFile(outputFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read output file: %s", err)
 	}
+
+	if string(output) != expectedOutput {
+		t.Errorf("Expected output %q, got %q", expectedOutput, string(output))
+	}
+	return nil
 }

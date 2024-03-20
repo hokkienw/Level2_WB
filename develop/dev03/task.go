@@ -4,102 +4,124 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io"
+	"log"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 )
 
+type fileString struct {
+	Line string
+	Key  string
+}
+
 func main() {
-	column := flag.Int("k", 0, "указание колонки для сортировки")
-	numeric := flag.Bool("n", false, "сортировать по числовому значению")
-	reverse := flag.Bool("r", false, "сортировать в обратном порядке")
-	unique := flag.Bool("u", false, "не выводить повторяющиеся строки")
+	columnNumber := flag.Int("c", 1, "column number for sorting")
+	isNumeric := flag.Bool("n", false, "sort by numeric value")
+	isReverse := flag.Bool("r", false, "reverse the sorting order")
+	isUnique := flag.Bool("u", false, "output only the first of an equal run")
 	flag.Parse()
 
-	file, err := os.Open(flag.Arg(0))
+	if flag.NArg() != 2 {
+		log.Fatalln("incorrect input")
+	}
+
+	inputFile := flag.Arg(0)
+	outputFile := flag.Arg(1)
+
+	err := compareSort(inputFile, outputFile, *columnNumber, *isNumeric, *isReverse, *isUnique)
 	if err != nil {
-		fmt.Println("Ошибка при открытии файла:", err)
-		os.Exit(1)
+		log.Fatalln(err)
+	}
+}
+
+func compareSort(inputFile, outputFile string, columnNumber int, isNumeric, isReverse, isUnique bool) error {
+	lines, err := fileReader(inputFile)
+	if err != nil {
+		return err
+	}
+
+	var data []fileString
+	for _, line := range lines {
+		columns := strings.Fields(line)
+		var key string
+		if columnNumber-1 < len(columns) {
+			key = columns[columnNumber-1]
+		}
+		data = append(data, fileString{line, key})
+	}
+
+	less := func(i, j int) bool {
+		if isNumeric {
+			numI, errI := strconv.ParseFloat(data[i].Key, 64)
+			numJ, errJ := strconv.ParseFloat(data[j].Key, 64)
+			if errI == nil && errJ == nil {
+				return numI < numJ
+			}
+		}
+		return data[i].Key < data[j].Key
+	}
+
+	if isReverse {
+		sort.SliceStable(data, func(i, j int) bool {
+			return less(j, i)
+		})
+	} else {
+		sort.SliceStable(data, less)
+	}
+
+	if isUnique {
+		data = removeDuplicates(data)
+	}
+
+	if err := fileWriter(data, outputFile); err != nil {
+		return err
+	}
+	return nil
+}
+
+func fileReader(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
 	}
 	defer file.Close()
 
 	var lines []string
-	reader := bufio.NewReader(file)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil && err != io.EOF {
-			fmt.Println("Ошибка при чтении файла:", err)
-			os.Exit(1)
-		}
-		line = strings.TrimSpace(line)
-		if line != "" {
-			lines = append(lines, line)
-		}
-		if err == io.EOF {
-			break
-		}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
 	}
-
-	sort.SliceStable(lines, func(i, j int) bool {
-		return compare(lines[i], lines[j], *column, *numeric) < 0
-	})
-
-	if *reverse {
-		reverseSlice(lines)
-	}
-
-	if *unique {
-		lines = removeDuplicates(lines)
-	}
-
-	for _, line := range lines {
-		fmt.Println(line)
-	}
+	return lines, scanner.Err()
 }
 
-func compare(a, b string, column int, numeric bool) int {
-	if column > 0 {
-		wordsA := strings.Fields(a)
-		wordsB := strings.Fields(b)
-		if column <= len(wordsA) && column <= len(wordsB) {
-			a = wordsA[column-1]
-			b = wordsB[column-1]
-		}
+func fileWriter(data []fileString, path string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
 	}
+	defer file.Close()
 
-	if numeric {
-		numA, errA := strconv.Atoi(a)
-		numB, errB := strconv.Atoi(b)
-		if errA == nil && errB == nil {
-			if numA < numB {
-				return -1
-			} else if numA > numB {
-				return 1
-			} else {
-				return 0
-			}
-		}
+	w := bufio.NewWriter(file)
+	for _, line := range data {
+		fmt.Fprintln(w, line.Line)
 	}
-
-	return strings.Compare(a, b)
+	return w.Flush()
 }
 
-func reverseSlice(slice []string) {
-	for i, j := 0, len(slice)-1; i < j; i, j = i+1, j-1 {
-		slice[i], slice[j] = slice[j], slice[i]
+func removeDuplicates(data []fileString) []fileString {
+	if len(data) == 0 {
+		return data
 	}
-}
 
-func removeDuplicates(slice []string) []string {
-	seen := make(map[string]bool)
-	result := make([]string, 0, len(slice))
-	for _, str := range slice {
-		if !seen[str] {
-			seen[str] = true
-			result = append(result, str)
+	uniqueData := []fileString{data[0]}
+	lastLine := data[0].Line
+	for _, d := range data[1:] {
+		if d.Line != lastLine {
+			uniqueData = append(uniqueData, d)
+			lastLine = d.Line
 		}
 	}
-	return result
+	return uniqueData
 }

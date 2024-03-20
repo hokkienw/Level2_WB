@@ -93,7 +93,7 @@ func main() {
 	http.HandleFunc("/events_for_week", eventsForWeekHandler)
 	http.HandleFunc("/events_for_month", eventsForMonthHandler)
 
-	port := ":8080"
+	port := ":8888"
 	log.Println("Server started on port", port)
 	log.Fatal(http.ListenAndServe(port, nil))
 }

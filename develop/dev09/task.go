@@ -10,8 +10,8 @@ import (
 )
 
 func main() {
-	urlFlag := flag.String("url", "", "URL сайта для скачивания")
-	outputFlag := flag.String("output", "index.html", "Имя файла для сохранения")
+	urlFlag := flag.String("u", "", "URL сайта для скачивания")
+	outputFlag := flag.String("o", "index.html", "Имя файла для сохранения")
 
 	flag.Parse()
 

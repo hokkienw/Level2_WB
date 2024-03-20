@@ -3,33 +3,39 @@ package main
 import (
 	"fmt"
 	"time"
+	"sync"
 )
-
 
 func or(channels ...<-chan interface{}) <-chan interface{} {
 	orDone := make(chan interface{})
 
-	go func() {
-		defer close(orDone)
-		var cases []<-chan interface{}
-		for _, ch := range channels {
-			cases = append(cases, ch)
-		}
+	switch len(channels) {
+	case 0:
+		out := make(chan interface{})
+		close(out)
+		return out
+	case 1:
+		return channels[0]
+	}
 
-		select {
-		case <-cases[0]:
-			return
-		case <-cases[1]:
-			return
-		case <-cases[2]:
-			return
-		case <-cases[3]:
-			return
+	go func() {
+		var once sync.Once
+		for _, c := range channels {
+			go func(ch <-chan interface{}) {
+				select {
+				case _, ok := <-ch:
+					if !ok {
+						once.Do(func() {
+							close(orDone)
+						})
+					}
+				}
+			}(c)
 		}
 	}()
-
 	return orDone
 }
+
 
 func main() {
 	sig := func(after time.Duration) <-chan interface{} {
